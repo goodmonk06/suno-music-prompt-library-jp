@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { musicPromptSchema } from "@/lib/validations";
+import { handleError, successResponse } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,55 +27,42 @@ export async function GET(request: NextRequest) {
       usageTags: JSON.parse(prompt.usageTags),
     }));
 
-    return NextResponse.json(parsedPrompts);
+    return successResponse(parsedPrompts);
   } catch (error) {
-    console.error("Error fetching prompts:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch prompts" },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      title,
-      description,
-      mainPrompt,
-      genre,
-      bpmRange,
-      moodTags,
-      usageTags,
-      youtubeTitleTemplate,
-      youtubeDescriptionTemplate,
-    } = body;
+
+    // バリデーション
+    const validatedData = musicPromptSchema.parse(body);
 
     const prompt = await prisma.musicPrompt.create({
       data: {
-        title,
-        description,
-        mainPrompt,
-        genre,
-        bpmRange,
-        moodTags: JSON.stringify(moodTags || []),
-        usageTags: JSON.stringify(usageTags || []),
-        youtubeTitleTemplate: youtubeTitleTemplate || null,
-        youtubeDescriptionTemplate: youtubeDescriptionTemplate || null,
+        title: validatedData.title,
+        description: validatedData.description,
+        mainPrompt: validatedData.mainPrompt,
+        genre: validatedData.genre,
+        bpmRange: validatedData.bpmRange,
+        moodTags: JSON.stringify(validatedData.moodTags),
+        usageTags: JSON.stringify(validatedData.usageTags),
+        youtubeTitleTemplate: validatedData.youtubeTitleTemplate || null,
+        youtubeDescriptionTemplate: validatedData.youtubeDescriptionTemplate || null,
       },
     });
 
-    return NextResponse.json({
-      ...prompt,
-      moodTags: JSON.parse(prompt.moodTags),
-      usageTags: JSON.parse(prompt.usageTags),
-    });
-  } catch (error) {
-    console.error("Error creating prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to create prompt" },
-      { status: 500 }
+    return successResponse(
+      {
+        ...prompt,
+        moodTags: JSON.parse(prompt.moodTags),
+        usageTags: JSON.parse(prompt.usageTags),
+      },
+      201
     );
+  } catch (error) {
+    return handleError(error);
   }
 }

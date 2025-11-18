@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { musicPromptUpdateSchema } from "@/lib/validations";
+import { handleError, successResponse, ApiError } from "@/lib/api-utils";
 
 export async function GET(
   request: NextRequest,
@@ -11,20 +13,16 @@ export async function GET(
     });
 
     if (!prompt) {
-      return NextResponse.json({ error: "Prompt not found" }, { status: 404 });
+      throw new ApiError(404, "プロンプトが見つかりません");
     }
 
-    return NextResponse.json({
+    return successResponse({
       ...prompt,
       moodTags: JSON.parse(prompt.moodTags),
       usageTags: JSON.parse(prompt.usageTags),
     });
   } catch (error) {
-    console.error("Error fetching prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch prompt" },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
@@ -34,44 +32,33 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const {
-      title,
-      description,
-      mainPrompt,
-      genre,
-      bpmRange,
-      moodTags,
-      usageTags,
-      youtubeTitleTemplate,
-      youtubeDescriptionTemplate,
-    } = body;
+
+    // バリデーション
+    const validatedData = musicPromptUpdateSchema.parse(body);
+
+    const updateData: any = {};
+    if (validatedData.title !== undefined) updateData.title = validatedData.title;
+    if (validatedData.description !== undefined) updateData.description = validatedData.description;
+    if (validatedData.mainPrompt !== undefined) updateData.mainPrompt = validatedData.mainPrompt;
+    if (validatedData.genre !== undefined) updateData.genre = validatedData.genre;
+    if (validatedData.bpmRange !== undefined) updateData.bpmRange = validatedData.bpmRange;
+    if (validatedData.moodTags !== undefined) updateData.moodTags = JSON.stringify(validatedData.moodTags);
+    if (validatedData.usageTags !== undefined) updateData.usageTags = JSON.stringify(validatedData.usageTags);
+    if (validatedData.youtubeTitleTemplate !== undefined) updateData.youtubeTitleTemplate = validatedData.youtubeTitleTemplate || null;
+    if (validatedData.youtubeDescriptionTemplate !== undefined) updateData.youtubeDescriptionTemplate = validatedData.youtubeDescriptionTemplate || null;
 
     const prompt = await prisma.musicPrompt.update({
       where: { id: params.id },
-      data: {
-        title,
-        description,
-        mainPrompt,
-        genre,
-        bpmRange,
-        moodTags: JSON.stringify(moodTags || []),
-        usageTags: JSON.stringify(usageTags || []),
-        youtubeTitleTemplate: youtubeTitleTemplate || null,
-        youtubeDescriptionTemplate: youtubeDescriptionTemplate || null,
-      },
+      data: updateData,
     });
 
-    return NextResponse.json({
+    return successResponse({
       ...prompt,
       moodTags: JSON.parse(prompt.moodTags),
       usageTags: JSON.parse(prompt.usageTags),
     });
   } catch (error) {
-    console.error("Error updating prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to update prompt" },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
@@ -84,12 +71,8 @@ export async function DELETE(
       where: { id: params.id },
     });
 
-    return NextResponse.json({ success: true });
+    return successResponse({ success: true });
   } catch (error) {
-    console.error("Error deleting prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to delete prompt" },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
