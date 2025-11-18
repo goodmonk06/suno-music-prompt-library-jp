@@ -10,8 +10,123 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Core entity: Music generation prompts
 model MusicPrompt {
   id                         String   @id @default(cuid())
+  title                      String
+  description                String
+  mainPrompt                 String
+  genre                      String
+  bpmRange                   String
+  moodTags                   String   // JSON string - being migrated to Tag relationship
+  usageTags                  String   // JSON string - being migrated to Tag relationship
+  youtubeTitleTemplate       String?
+  youtubeDescriptionTemplate String?
+
+  // Metadata
+  status                     String   @default("published") // draft, published, archived
+  viewCount                  Int      @default(0)
+  copyCount                  Int      @default(0)
+  userId                     String?  // Future: owner of this prompt
+
+  // Timestamps
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  // Relationships
+  collections    CollectionPrompt[]
+  tags           PromptTag[]
+  versions       PromptVersion[]
+  usageRecords   PromptUsage[]
+
+  @@index([genre])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// Collections: Group related prompts together
+model Collection {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  visibility  String   @default("private") // private, unlisted, public
+  userId      String?  // Future: owner of this collection
+
+  // Metadata
+  promptCount Int      @default(0)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  prompts CollectionPrompt[]
+
+  @@index([userId])
+  @@index([visibility])
+  @@index([createdAt])
+}
+
+// Join table: Many-to-many relationship between Collections and Prompts
+model CollectionPrompt {
+  id           String   @id @default(cuid())
+  collectionId String
+  promptId     String
+  order        Int      @default(0) // Position in collection
+  addedAt      DateTime @default(now())
+
+  collection Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  prompt     MusicPrompt  @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, promptId])
+  @@index([collectionId])
+  @@index([promptId])
+}
+
+// Tags: Normalized tags for better organization and discovery
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        String   // mood, usage, genre, custom
+  description String?
+
+  // Metadata
+  usageCount  Int      @default(0)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  prompts PromptTag[]
+
+  @@index([type])
+  @@index([usageCount])
+}
+
+// Join table: Many-to-many relationship between Prompts and Tags
+model PromptTag {
+  id       String   @id @default(cuid())
+  promptId String
+  tagId    String
+  addedAt  DateTime @default(now())
+
+  prompt MusicPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  tag    Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([promptId, tagId])
+  @@index([promptId])
+  @@index([tagId])
+}
+
+// Prompt versions: Track changes to prompts over time
+model PromptVersion {
+  id                         String   @id @default(cuid())
+  promptId                   String
+  version                    Int
+
+  // Snapshot of prompt data at this version
   title                      String
   description                String
   mainPrompt                 String
@@ -21,9 +136,34 @@ model MusicPrompt {
   usageTags                  String   // JSON string
   youtubeTitleTemplate       String?
   youtubeDescriptionTemplate String?
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
 
-  @@index([genre])
+  // Version metadata
+  changeNote                 String?
+  createdBy                  String?  // Future: user who made this change
+  createdAt                  DateTime @default(now())
+
+  // Relationships
+  prompt MusicPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@unique([promptId, version])
+  @@index([promptId])
   @@index([createdAt])
+}
+
+// Usage tracking: Record when prompts are viewed or copied
+model PromptUsage {
+  id        String   @id @default(cuid())
+  promptId  String
+  action    String   // view, copy, share, export
+  userId    String?  // Future: user who performed action
+  metadata  String?  // JSON: additional context (user agent, referrer, etc.)
+  timestamp DateTime @default(now())
+
+  // Relationships
+  prompt MusicPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([promptId])
+  @@index([action])
+  @@index([timestamp])
+  @@index([userId])
 }
